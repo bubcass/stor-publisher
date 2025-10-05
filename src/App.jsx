@@ -121,7 +121,7 @@ export default function App() {
   const editor = useEditor({
     extensions,
     content:
-      '<p>Welcome to your Tiptap POC.</p><p>Try typing, then export to HTML/XML, or import a .docx.</p>',
+      '<p>Welcome to the <strong style:{{color: #7F6C2E}}>Stór Publisher</strong> document portal proof of concept.</p><p>The best way to get documents into <strong>Stór</strong> is by uploading Word documents from the correct template with appropriate metadata. Documents may also be edited within this online <strong>Stór Publisher</strong> platform.</p><p>Document data available as ProseMirror JSON (canonical source), HTML and XML.</p>',
   })
 
   const [metadata, setMetadata] = useState(
