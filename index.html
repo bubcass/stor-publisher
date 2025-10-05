@@ -310,6 +310,58 @@ pre{
   font-size: 12px; background: #fff7ea; color: #7f4a00; border: 1px solid var(--oor-gold);
 }
 .acc-panel { padding: 12px; }
+.tb-divider {
+  width: 1px; height: 28px; background: var(--border);
+  margin: 0 4px; display: inline-block;
+}
+
+.tb-select {
+  appearance: none;
+  padding: 6px 10px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: #fff;
+  font: 500 13px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+.tb-select:focus { outline: none; background: #f8fafc; }
+
+/* Dark mode (very light touch; expand if you want full theme) */
+.dark .toolbar { background: #0f172a; border-bottom-color: #334155; }
+.dark .tb-group { background: #111827; border-color: #334155; }
+.dark .tb-btn, .dark .tb-select { background: #111827; color: #e5e7eb; border-right-color: #334155; }
+.dark .tb-btn:hover { background: #1f2937; }
+.dark .tb-btn.active { box-shadow: inset 0 0 0 1px #9a843b; background: #1b1b16; }
+.dark .tb-divider { background: #334155; }
+/* Actions bar: split left/right */
+.actions{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:.5rem;
+  flex-wrap:wrap;
+  margin:.75rem 0;
+}
+.actions-left{
+  display:flex;
+  align-items:center;
+  gap:.5rem;
+}
+.actions-right{
+  margin-left:auto;            /* push to the right */
+  display:flex;
+  gap:.5rem;
+  flex-wrap:wrap;
+}
+
+/* Responsive stacking */
+@media (max-width: 640px){
+  .actions{ flex-direction:column; align-items:stretch; }
+  .actions-left, .actions-right{
+    width:100%;
+    justify-content:space-between;
+  }
+  .actions-right{ justify-content:flex-end; }
+}
     </style>
   </head>
 

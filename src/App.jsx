@@ -4,6 +4,16 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import History from '@tiptap/extension-history'
+
+// extra formatting/layout extensions (v2.x)
+import Underline from '@tiptap/extension-underline'
+import Highlight from '@tiptap/extension-highlight'
+import Link from '@tiptap/extension-link'
+import Superscript from '@tiptap/extension-superscript'
+import Subscript from '@tiptap/extension-subscript'
+import TextAlign from '@tiptap/extension-text-align'
+import Image from '@tiptap/extension-image'
+
 import * as mammoth from 'mammoth/mammoth.browser'
 
 // UI + utils
@@ -12,7 +22,7 @@ import { wrapHtml } from './serializers/htmlTemplate.js'
 import { pmJsonToXml } from './serializers/toXml.js'
 import { downloadFile } from './utils/download.js'
 
-// Metadata: schema, helpers, validation, extractor, form, status, accordion, contributors
+// Metadata
 import { MetadataSchema } from './metadata/schema.js'
 import { unitFromCode } from './utils/imprint.js'
 import { extractDocxMetadata } from './utils/extractDocxMetadata.js'
@@ -22,7 +32,6 @@ import MetadataForm from './components/MetadataForm.jsx'
 import ContributorsEditor from './components/ContributorsEditor.jsx'
 import Accordion from './components/Accordion.jsx'
 
-/** Try pmJsonToXml(doc, meta) first; fall back to pmJsonToXml(doc) for backward compatibility. */
 function buildXml(docJson, meta) {
   try {
     return pmJsonToXml(docJson, meta)
@@ -35,11 +44,6 @@ function buildXml(docJson, meta) {
   }
 }
 
-/** Parse a semicolon-separated Contributors string from DOCX Custom Properties.
- * Entry format: "Family, Given|role|unitOrCommitteeCode|email?|orcid?"
- * - unitOrCommitteeCode may be an imprint code (PBO, LRS, COMMS, CMSN, OTHER)
- *   or a committee code like "COM-FIN" (treated as Committees umbrella with committeeCode).
- */
 function parseContributors(raw, fallbackUnitCode, fallbackCommitteeCode) {
   if (!raw) return []
   return raw
@@ -51,7 +55,6 @@ function parseContributors(raw, fallbackUnitCode, fallbackCommitteeCode) {
         .split('|')
         .map(t => t.trim())
 
-      // split name: prefer "Family, Given", fallback to "Given Family"
       let given = '', family = name
       if (name.includes(',')) {
         const [fam, giv] = name.split(',').map(t => t.trim())
@@ -95,10 +98,22 @@ export default function App() {
     () => [
       History.configure({ depth: 100, newGroupDelay: 500 }),
       StarterKit.configure({
-        history: false, // prevent double history registration
-        heading: { levels: [1, 2, 3] },
+        history: false,
+        heading: { levels: [1, 2, 3, 4] },
       }),
       Placeholder.configure({ placeholder: 'Write something… or import a .docx' }),
+      Underline,
+      Highlight,
+      Link.configure({
+        autolink: true,
+        openOnClick: true,
+        linkOnPaste: true,
+        protocols: ['http', 'https', 'mailto'],
+      }),
+      Superscript,
+      Subscript,
+      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Image.configure({ inline: false }),
     ],
     [],
   )
@@ -109,7 +124,6 @@ export default function App() {
       '<p>Welcome to your Tiptap POC.</p><p>Try typing, then export to HTML/XML, or import a .docx.</p>',
   })
 
-  // Metadata state with safe defaults
   const [metadata, setMetadata] = useState(
     MetadataSchema.parse({
       title: 'Untitled',
@@ -117,14 +131,11 @@ export default function App() {
       status: 'draft',
       keywords: [],
       contributors: [],
-      // imprint stays optional until an import or form sets it
     }),
   )
 
-  // Live validation
   const validation = validateMetadata(metadata)
   const canExport = validation.ok && validation.errors.length === 0
-
   const fileInputRef = useRef(null)
 
   const handleExportHTML = () => {
@@ -146,8 +157,6 @@ export default function App() {
     if (!file) return
     try {
       const arrayBuffer = await file.arrayBuffer()
-
-      // 1) Body: DOCX -> HTML via Mammoth, then set into editor
       const result = await mammoth.convertToHtml(
         { arrayBuffer },
         {
@@ -156,24 +165,17 @@ export default function App() {
             "p[style-name='Heading 1'] => h1",
             "p[style-name='Heading 2'] => h2",
             "p[style-name='Heading 3'] => h3",
+            "p[style-name='Heading 4'] => h4",
           ],
           includeDefaultStyleMap: true,
         },
       )
       editor.chain().focus().setContent(result.value, true).run()
 
-      // 2) Metadata: extract core/custom properties
       const { core, custom } = await extractDocxMetadata(arrayBuffer)
-
-      // 3) Map to canonical metadata (publisher, imprint, contributors, etc.)
       const docImprintCode = (custom.ImprintCode || 'OTHER').toUpperCase()
       const imprint = custom.ImprintCode
-        ? {
-            unitCode: docImprintCode,
-            unit: unitFromCode(docImprintCode),
-            // If you later add CommitteeCode in DOCX, include:
-            // committeeCode: custom.CommitteeCode || undefined,
-          }
+        ? { unitCode: docImprintCode, unit: unitFromCode(docImprintCode) }
         : undefined
 
       const mapped = {
@@ -193,7 +195,7 @@ export default function App() {
           .map(s => s.trim())
           .filter(Boolean),
         publisher: 'Houses of the Oireachtas',
-        imprint, // keeping the current naming until/if we rename to "unit"
+        imprint,
         contributors: parseContributors(custom.Contributors, imprint?.unitCode, undefined),
       }
 
@@ -206,7 +208,7 @@ export default function App() {
       console.error(err)
       alert('Failed to import .docx: ' + (err?.message || String(err)))
     } finally {
-      e.target.value = '' // allow selecting the same file again
+      e.target.value = ''
     }
   }
 
@@ -215,27 +217,32 @@ export default function App() {
     await navigator.clipboard.writeText(JSON.stringify(editor.getJSON(), null, 2))
   }
 
+  const xmlPreview = (() => {
+    if (!editor) return ''
+    try {
+      return buildXml(editor.getJSON(), metadata)
+    } catch (e) {
+      return `<!-- XML preview error: ${e?.message || e} -->`
+    }
+  })()
+
   if (!editor) return <p style={{ padding: 12, fontFamily: 'system-ui' }}>Loading editor…</p>
 
   return (
     <div className="container">
       <h1>Stór Publisher</h1>
 
-      {/* Status banner */}
       <MetadataStatus report={validation} metadata={metadata} />
 
-      {/* Collapsible metadata area */}
       <Accordion
         title="Metadata"
         defaultOpen={validation.errors.length > 0}
         badge={validation.errors.length > 0 ? `Needs attention (${validation.errors.length})` : undefined}
       >
         <MetadataForm value={metadata} onChange={setMetadata} />
-
-        {/* Contributors editor (add/remove, roles, affiliation overrides) */}
         <ContributorsEditor
           value={metadata.contributors}
-          imprint={metadata.imprint} // keep as "imprint" until/if you rename to "unit"
+          imprint={metadata.imprint}
           onChange={(nextList) => setMetadata(m => ({ ...m, contributors: nextList }))}
         />
       </Accordion>
@@ -247,40 +254,50 @@ export default function App() {
         </div>
       </div>
 
+      {/* Actions bar: left = import, right = export/copy */}
       <div className="actions">
-        <button onClick={handleExportHTML}>Export HTML</button>
-        <button
-          onClick={handleExportXML}
-          disabled={!canExport}
-          title={!canExport ? 'Fix required metadata first' : 'Export XML'}
-        >
-          Export XML
-        </button>
-        <button onClick={handleCopyJSON}>Copy JSON</button>
-
-        {/* Label-based upload control (styled via .file-label in index.html) */}
-        <label className="file-label">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".docx"
-            onChange={handleDocxSelected}
-            style={{ display: 'none' }}
-          />
-          Import .docx
-        </label>
-      </div>
-
-      <div className="panel">
-        <div>
-          <h3>ProseMirror JSON (live)</h3>
-          <pre>{JSON.stringify(editor.getJSON(), null, 2)}</pre>
+        <div className="actions-left">
+          <label className="file-label">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".docx"
+              onChange={handleDocxSelected}
+              style={{ display: 'none' }}
+            />
+            Import .docx
+          </label>
         </div>
-        <div>
-          <h3>HTML (live)</h3>
-          <pre>{editor.getHTML()}</pre>
+
+        <div className="actions-right">
+          <button onClick={handleExportHTML}>Export HTML</button>
+          <button
+            onClick={handleExportXML}
+            disabled={!canExport}
+            title={!canExport ? 'Fix required metadata first' : 'Export XML'}
+          >
+            Export XML
+          </button>
+          <button onClick={handleCopyJSON}>Copy JSON</button>
         </div>
       </div>
+
+      {/* Live output accordion with JSON, HTML, and XML previews */}
+      <Accordion title="Live output (JSON, HTML, XML)" defaultOpen={false}>
+        <div style={{ display: 'grid', gap: '12px' }}>
+          <Accordion title="ProseMirror JSON (canonical)" defaultOpen={false}>
+            <pre>{JSON.stringify(editor.getJSON(), null, 2)}</pre>
+          </Accordion>
+
+          <Accordion title="HTML" defaultOpen={false}>
+            <pre>{editor.getHTML()}</pre>
+          </Accordion>
+
+          <Accordion title="XML" defaultOpen={false}>
+            <pre>{xmlPreview}</pre>
+          </Accordion>
+        </div>
+      </Accordion>
     </div>
   )
 }

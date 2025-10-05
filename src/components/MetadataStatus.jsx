@@ -23,9 +23,9 @@ export default function MetadataStatus({ report, metadata }) {
   )
 
   return (
-    <div style={{margin:'8px 0 12px', padding:'8px 10px', border:'1px solid #eee', borderRadius:8, background:'#fafafa'}}>
+    <div style={{margin:'8px 0 12px', padding:'8px 10px', border:'1px solid #7F6C2E', borderRadius:8, background:'#fafafa'}}>
       {ok && errors.length === 0
-        ? <div>{pill('Ready to export')}</div>
+        ? <div>{pill('Ready for publication to Stór')}</div>
         : <div style={{marginBottom:6}}>
             {errors.length ? pill(`Missing: ${errors.join(', ')}`, 'err') : pill('Ready', 'ok')}
             {warnings.length ? pill(`Hints: ${warnings.join(', ')}`, 'warn') : null}
