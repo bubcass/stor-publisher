@@ -24,7 +24,7 @@ export const IMPRINTS = {
   },
   COMMISSION: {
     code: 'COMMISSION',
-    title: 'Commission',
+    title: 'Houses of the Oireachtas Commission',
   },
   OTHER: {
     code: 'OTHER',
