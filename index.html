@@ -362,6 +362,76 @@ pre{
   }
   .actions-right{ justify-content:flex-end; }
 }
+/* --- Compact status pill --- */
+.status-wrap { margin: 10px 0 14px; }
+
+.pill {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 999px;
+  font-weight: 500; line-height: 1.2;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.pill .pill-icon { font-size: 16px; }
+.pill .pill-main { display: grid; gap: 2px; }
+.pill .pill-title { font-weight: 600; }
+.pill .pill-meta { font-size: 12px; color: #6b7280; display: inline-flex; gap: 6px; align-items: center; }
+.pill .pill-dot { opacity: .7; }
+
+/* State colors */
+.pill.ok { border-color: #10b98133; background: #ecfdf5; }
+.pill.ok .pill-title { color: #065f46; }
+.pill.ok .pill-meta { color: #047857; }
+
+.pill.warn { border-color: #f59e0b33; background: #fff7ed; }
+.pill.warn .pill-title { color: #92400e; }
+.pill.warn .pill-meta { color: #b45309; }
+
+/* Error details toggle */
+.pill-errors { margin-top: 6px; }
+.pill-errors summary { cursor: pointer; font-size: 12px; color: #6b7280; }
+.pill-errors ul { margin: 6px 0 0 18px; padding: 0; }
+.pill-errors li { font-size: 13px; color: #374151; }
+
+/* Dark mode-friendly tweaks (optional) */
+.dark .pill { background: #0f172a; border-color: #334155; }
+.dark .pill.ok { background: #0b2f25; border-color: #14532d; }
+.dark .pill.warn { background: #3b2a0a; border-color: #b45309; }
+.dark .pill .pill-meta { color: #cbd5e1; }
+h1 {
+  font-family: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  text-align: center;
+  font-size: clamp(2.4rem, 5vw, 3.4rem);  /* scales between 38–54px */
+  font-weight: 700;
+  color: #7f6c2e;                         /* your gold tone */
+  letter-spacing: -0.015em;
+  margin: 2.5rem 0 0.5rem;
+  line-height: 1.1;
+}
+
+/* Subtitle directly below the main h1 */
+h2.subtitle {
+  font-family: "IBM Plex Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  text-align: center;
+  font-size: clamp(1rem, 2vw, 1.4rem);
+  font-weight: 400;
+  color: #555;                            /* subtle gray */
+  letter-spacing: 0;
+  margin-top: 0;
+  margin-bottom: 2rem;
+  line-height: 1.3;
+}
+.pill-title { display: inline-flex; align-items: center; gap: 8px; }
+.pill-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #111827;
+  border: 1px solid #d1d5db;
+}
+.dark .pill-badge { background: #1f2937; color: #e5e7eb; border-color: #374151; }
     </style>
   </head>
 

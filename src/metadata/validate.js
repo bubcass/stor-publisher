@@ -1,52 +1,66 @@
-import { MetadataSchema } from './schema.js'
+// src/metadata/validate.js
 
-const BLOCKING_FIELDS = ['title', 'language', 'status']
+// Simple ISO date (YYYY-MM-DD) check
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
-export function validateMetadata(meta) {
+export function validateMetadata(meta = {}) {
   const errors = []
-  // Blockers: required fields
-  if (!meta?.title || meta.title.trim().length < 3) errors.push('title')
-  if (!meta?.language) errors.push('language')
-  if (!meta?.status || !['draft','published','archived'].includes(meta.status)) errors.push('status')
-
   const warnings = []
-  if (!meta?.contributors?.length) warnings.push('contributors')
-  if (!meta?.license) warnings.push('license')
 
-  // Zod structural checks
-  const z = MetadataSchema.safeParse(meta)
-  const zodIssues = z.success ? [] : z.error.issues
-
-  // Treat Zod issues as warnings unless they touch blocking fields
-  const zodBlocking = []
-  const zodWarn = []
-
-  for (const issue of zodIssues) {
-    const top = issue.path?.[0]
-    if (BLOCKING_FIELDS.includes(top)) {
-      zodBlocking.push(issue)
-    } else {
-      zodWarn.push(issue)
-    }
+  // --- Required core fields ---
+  if (!meta.title || String(meta.title).trim().length < 3) {
+    errors.push('Title (min 3 chars)')
+  }
+  if (!meta.language || String(meta.language).trim().length === 0) {
+    errors.push('Language (e.g., "en")')
   }
 
-  // Merge any Zod blocking into our errors (rare, but explicit)
-  if (zodBlocking.length) {
-    for (const i of zodBlocking) {
-      const top = i.path?.[0] || 'unknown'
-      if (!errors.includes(top)) errors.push(top)
-    }
+  // ✅ Required now: version
+  if (!meta.version || String(meta.version).trim().length === 0) {
+    errors.push('Version')
   }
 
-  // Convert Zod warnings to a readable hint
-  if (zodWarn.length) {
-    warnings.push('format checks') // e.g., bad ORCID/email/etc.
+  // ✅ Required now: datePublished in YYYY-MM-DD
+  if (!meta.datePublished || !DATE_RE.test(String(meta.datePublished).slice(0, 10))) {
+    errors.push('Date published (YYYY-MM-DD)')
+  }
+
+  // ✅ Required now: at least one keyword
+  if (!Array.isArray(meta.keywords) || meta.keywords.length === 0) {
+    errors.push('At least one keyword')
+  }
+
+  // --- Helpful non-blocking checks (warnings) ---
+  if (!meta.unit?.unitCode) {
+    warnings.push('Unit not set')
+  }
+  if (!Array.isArray(meta.contributors) || meta.contributors.length === 0) {
+    warnings.push('No contributors listed')
+  }
+  if (meta.status === 'published') {
+    // If published, strong suggestion to have a license
+    if (!meta.license || String(meta.license).trim().length === 0) {
+      warnings.push('License is empty for a published item')
+    }
+    // If datePublished is in the future, warn
+    const d = safeDate(meta.datePublished)
+    if (d && d.getTime() > Date.now()) {
+      warnings.push('Date published is in the future')
+    }
   }
 
   return {
-    ok: errors.length === 0,  // <-- only true blockers affect this
+    ok: errors.length === 0,
     errors,
     warnings,
-    zodIssues,                // keep available for debugging if needed
+  }
+}
+
+function safeDate(s) {
+  try {
+    const d = new Date(s)
+    return isNaN(d.getTime()) ? null : d
+  } catch {
+    return null
   }
 }
