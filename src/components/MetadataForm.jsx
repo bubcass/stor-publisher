@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react'
 import { IMPRINT_OPTIONS } from '../utils/imprint.js'
 
-// Common license presets (tweak as needed)
+// Licence presets
 const LICENSES = [
   'Oireachtas (Open Data) PSI Licence',
   'CC BY 4.0',
@@ -12,6 +12,10 @@ const LICENSES = [
   'Custom…',
 ]
 
+// Our preferred defaults
+const DEFAULT_VERSION = '0.1'
+const DEFAULT_LICENSE = 'Oireachtas (Open Data) PSI Licence'
+
 export default function MetadataForm({ value, onChange }) {
   const meta = value || {}
 
@@ -20,6 +24,22 @@ export default function MetadataForm({ value, onChange }) {
     const next = { ...(meta.unit || {}), ...patch }
     set({ unit: next })
   }
+
+  // Ensure defaults are *persisted* in metadata (not just shown in inputs)
+  useEffect(() => {
+    const patch = {}
+    if (!meta.version || String(meta.version).trim() === '') {
+      patch.version = DEFAULT_VERSION
+    }
+    if (!meta.license || String(meta.license).trim() === '') {
+      patch.license = DEFAULT_LICENSE
+    }
+    if (Object.keys(patch).length) {
+      onChange({ ...meta, ...patch })
+    }
+    // Re-run when these fields change (e.g., after a DOCX import resets them)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta.version, meta.license])
 
   const isCommittees = (meta.unit?.unitCode || '').toUpperCase() === 'COM'
   const licenseIsCustom =
@@ -35,7 +55,7 @@ export default function MetadataForm({ value, onChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta.keywords])
 
-  // Commit keywords array on blur (or you could add Enter-key commit if you want)
+  // Commit keywords array on blur
   const commitKeywords = () => {
     const list = (keywordsInput || '')
       .split(',')
@@ -81,7 +101,7 @@ export default function MetadataForm({ value, onChange }) {
           onBlur={commitKeywords}
         />
         <small style={{ color: '#6b7280' }}>
-          Separate with commas. Parsed on blur.
+          Separate with commas.
         </small>
       </label>
 
@@ -124,26 +144,27 @@ export default function MetadataForm({ value, onChange }) {
         <span>Version</span>
         <input
           placeholder="e.g. 1.0.0 or 2025.10"
-          value={meta.version || ''}
+          value={meta.version || DEFAULT_VERSION}
           onChange={(e) => set({ version: e.target.value.trim() })}
         />
       </label>
 
-      {/* License */}
+      {/* Licence */}
       <label style={{ display: 'grid', gap: 4 }}>
         <span>Licence</span>
         <select
-          value={licenseIsCustom ? 'Custom…' : meta.license || ''}
+          value={licenseIsCustom ? 'Custom…' : (meta.license || DEFAULT_LICENSE)}
           onChange={(e) => {
             const v = e.target.value
             if (v === 'Custom…') set({ license: '' })
             else set({ license: v })
           }}
         >
-          <option value="">(none)</option>
+          {/* Keep a “(none)” option out if you truly want a default always set */}
           {LICENSES.map((name) => (
             <option key={name} value={name}>{name}</option>
           ))}
+          <option value="Custom…">Custom…</option>
         </select>
 
         {(meta.license === '' || licenseIsCustom) && (
