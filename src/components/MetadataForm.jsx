@@ -79,6 +79,15 @@ export default function MetadataForm({ value, onChange }) {
           onChange={(e) => set({ title: e.target.value })}
         />
       </label>
+      {/* Subtitle */}
+<label style={{ display: 'grid', gap: 4 }}>
+  <span>Subtitle</span>
+  <input
+    placeholder="e.g. An analysis of fiscal policy trends 2015–2025"
+    value={meta.subtitle || ''}
+    onChange={(e) => set({ subtitle: e.target.value })}
+  />
+</label>
 
       {/* DOI */}
       <label style={{ display: 'grid', gap: 4 }}>

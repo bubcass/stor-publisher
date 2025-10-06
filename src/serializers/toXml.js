@@ -72,7 +72,6 @@ function serializeBlock(node) {
 
     // If you later add custom nodes (section, figure, table…), add cases here.
     default:
-      // Fallback: try to serialize any children inline or as blocks
       if (node.type === 'text') return textWithMarks(node)
       return C
   }
@@ -94,15 +93,17 @@ function contributorsXml(list = []) {
       let aff = ''
       if (c.affiliation) {
         const a = c.affiliation
-        const attrs = [`unitCode="${esc(a.unitCode)}"`]
+        const attrs = []
+        if (a.unitCode) attrs.push(`unitCode="${esc(a.unitCode)}"`)
         if (a.committeeCode) attrs.push(`committeeCode="${esc(a.committeeCode)}"`)
         if (a.unitUri) attrs.push(`unitUri="${esc(a.unitUri)}"`)
         if (a.committeeUri) attrs.push(`committeeUri="${esc(a.committeeUri)}"`)
         if (a.orgId) attrs.push(`orgId="${esc(a.orgId)}"`)
         const country = a.country ? `<country>${esc(a.country)}</country>` : ''
+        const unitText = a.unit ? esc(a.unit) : ''
         aff = `<affiliation ${attrs.join(' ')}>
   <org>Houses of the Oireachtas</org>
-  <unit>${esc(a.unit)}</unit>
+  ${unitText ? `<unit>${unitText}</unit>` : ''}
   ${country}
 </affiliation>`
       }
@@ -143,6 +144,9 @@ function dataLinksXml(list = []) {
 
 // ---------- main ----------
 export function pmJsonToXml(docJson, meta = {}) {
+  // Backward-compat: accept meta.imprint but prefer meta.unit
+  const unitOrImprint = meta.unit || meta.imprint
+
   // sensible defaults so callers can omit meta during the transition
   const M = {
     schemaVersion: meta.schemaVersion || 'researchDocument@0.2',
@@ -151,30 +155,41 @@ export function pmJsonToXml(docJson, meta = {}) {
     abstract: meta.abstract,
     language: meta.language || 'en',
     status: meta.status || 'draft',
-    version: meta.version,
+
+    // Defaults you requested
+    version: meta.version && String(meta.version).trim() ? meta.version : '0.1',
     datePublished: meta.datePublished,
     dateModified: meta.dateModified,
     doi: meta.doi,
     series: meta.series, // {name, number}
-    license: meta.license,
+
+    license:
+      meta.license && String(meta.license).trim()
+        ? meta.license
+        : 'Oireachtas (Open Data) PSI Licence',
+
     keywords: meta.keywords || [],
     contributors: meta.contributors || [],
     related: meta.related || [],
     dataLinks: meta.dataLinks || [],
-    publisher: meta.publisher, // typically "Houses of the Oireachtas"
-    imprint: meta.imprint,     // { unit, unitCode, committeeCode?, unitUri?, committeeUri? }
+    publisher: meta.publisher || 'Houses of the Oireachtas',
+
+    // renamed: use meta.unit going forward
+    unit: unitOrImprint, // { unit, unitCode, committeeCode?, unitUri?, committeeUri? }
   }
 
   const body = (docJson?.content || []).map(serializeBlock).join('')
 
-  // imprint / publisher
-  const imprintStr = M.imprint
+  // unit / publisher
+  const unitStr = M.unit
     ? (() => {
-        const attrs = [`unitCode="${esc(M.imprint.unitCode)}"`]
-        if (M.imprint.committeeCode) attrs.push(`committeeCode="${esc(M.imprint.committeeCode)}"`)
-        if (M.imprint.unitUri) attrs.push(`unitUri="${esc(M.imprint.unitUri)}"`)
-        if (M.imprint.committeeUri) attrs.push(`committeeUri="${esc(M.imprint.committeeUri)}"`)
-        return `    <imprint ${attrs.join(' ')}>${esc(M.imprint.unit)}</imprint>\n`
+        const attrs = []
+        if (M.unit.unitCode) attrs.push(`unitCode="${esc(M.unit.unitCode)}"`)
+        if (M.unit.committeeCode) attrs.push(`committeeCode="${esc(M.unit.committeeCode)}"`)
+        if (M.unit.unitUri) attrs.push(`unitUri="${esc(M.unit.unitUri)}"`)
+        if (M.unit.committeeUri) attrs.push(`committeeUri="${esc(M.unit.committeeUri)}"`)
+        const label = M.unit.unit ? esc(M.unit.unit) : ''
+        return `    <unit ${attrs.join(' ')}>${label}</unit>\n`
       })()
     : ''
 
@@ -201,7 +216,7 @@ export function pmJsonToXml(docJson, meta = {}) {
     <title>${esc(M.title)}</title>
 ${subtitleStr}${abstractStr}    <status>${esc(M.status)}</status>
     <language>${esc(M.language)}</language>
-${versionStr}${datePubStr}${dateModStr}${doiStr}${seriesStr}${licenseStr}${publisherStr}${imprintStr}${keywordsStr ? '    ' + keywordsStr.replace(/\n/g, '\n    ') + '\n' : ''}${contributorsStr ? '    ' + contributorsStr.replace(/\n/g, '\n    ') + '\n' : ''}${relatedStr ? '    ' + relatedStr.replace(/\n/g, '\n    ') + '\n' : ''}${dataLinksStr ? '    ' + dataLinksStr.replace(/\n/g, '\n    ') + '\n' : ''}
+${versionStr}${datePubStr}${dateModStr}${doiStr}${seriesStr}${licenseStr}${publisherStr}${unitStr}${keywordsStr ? '    ' + keywordsStr.replace(/\n/g, '\n    ') + '\n' : ''}${contributorsStr ? '    ' + contributorsStr.replace(/\n/g, '\n    ') + '\n' : ''}${relatedStr ? '    ' + relatedStr.replace(/\n/g, '\n    ') + '\n' : ''}${dataLinksStr ? '    ' + dataLinksStr.replace(/\n/g, '\n    ') + '\n' : ''}
   </metadata>`
 
   // final document
