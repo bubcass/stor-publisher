@@ -31,7 +31,7 @@ export default function MetadataStatus({ report, metadata }) {
   const icon = ok && errors.length === 0 ? '✅' : '⚠️'
   const caption =
     ok && errors.length === 0
-      ? 'Ready for export'
+      ? 'Ready for export to Stór'
       : `Needs attention — ${errors.length} issue${errors.length === 1 ? '' : 's'}`
 
   return (

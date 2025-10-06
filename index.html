@@ -361,6 +361,34 @@ pre {
   .actions-right { justify-content: flex-end; }
 }
 .editor-shell .menubar { position: sticky; top: 0; z-index: 10; }
+/* Make the shell a column so toolbar stays on top */
+.editor-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Keep the menubar visible while the editor body scrolls */
+.editor-shell .menubar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Scrollable editor viewport */
+.editor-scroll {
+  max-height: 62vh;   /* try 62–70vh to taste */
+  min-height: 400px;
+  overflow: auto;
+  padding: 1rem;      /* was on .content */
+  background: var(--bg);
+}
+
+/* Optional: let users drag to resize the editor area */
+.editor-scroll {
+  resize: vertical;
+}
+
+/* If you still have .content styles, you can remove them or leave as fallback */
     </style>
   </head>
 

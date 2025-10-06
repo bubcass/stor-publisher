@@ -255,7 +255,7 @@ export default function App() {
 
       {/* Metadata accordion */}
       <Accordion
-  title="Metadata"
+  title="Article metadata"
   defaultOpen={false}
   badge={validation.errors.length > 0 ? `Needs attention (${validation.errors.length})` : undefined}
 >
@@ -269,10 +269,10 @@ export default function App() {
 
       {/* Editor */}
       <div className="editor-shell">
-        <MenuBar editor={editor} />
-        <div className="content">
-          <EditorContent editor={editor} />
-        </div>
+  <MenuBar editor={editor} />
+  <div className="editor-scroll">
+    <EditorContent editor={editor} />
+</div>
       </div>
 
       {/* Actions: import left, export/copy right */}

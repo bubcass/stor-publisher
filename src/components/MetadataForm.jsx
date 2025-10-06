@@ -133,7 +133,8 @@ export default function MetadataForm({ value, onChange }) {
         >
           <option value="draft">draft</option>
           <option value="in_review">in review</option>
-          <option value="published">published</option>
+          <option value="published">published (internal)</option>
+          <option value="published">published to Stór (public)</option>
           <option value="archived">archived</option>
         </select>
       </label>
