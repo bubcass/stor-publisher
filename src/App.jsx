@@ -149,7 +149,8 @@ export default function App() {
   const handleExportHTML = () => {
     if (!editor) return
     const body = editor.getHTML()
-    const page = wrapHtml(body)
+    // ✅ pass metadata so JSON-LD is injected in <head> by wrapHtml
+    const page = wrapHtml(body, metadata)
     downloadFile('document.html', page, 'text/html;charset=utf-8')
   }
 
@@ -255,24 +256,24 @@ export default function App() {
 
       {/* Metadata accordion */}
       <Accordion
-  title="Article metadata"
-  defaultOpen={false}
-  badge={validation.errors.length > 0 ? `Needs attention (${validation.errors.length})` : undefined}
->
-  <MetadataForm value={metadata} onChange={setMetadata} />
-  <ContributorsEditor
-    value={metadata.contributors}
-    unit={metadata.unit}
-    onChange={(nextList) => setMetadata(m => ({ ...m, contributors: nextList }))}
-  />
-</Accordion>
+        title="Article metadata"
+        defaultOpen={false}
+        badge={validation.errors.length > 0 ? `Needs attention (${validation.errors.length})` : undefined}
+      >
+        <MetadataForm value={metadata} onChange={setMetadata} />
+        <ContributorsEditor
+          value={metadata.contributors}
+          unit={metadata.unit}
+          onChange={(nextList) => setMetadata(m => ({ ...m, contributors: nextList }))}
+        />
+      </Accordion>
 
       {/* Editor */}
       <div className="editor-shell">
-  <MenuBar editor={editor} />
-  <div className="editor-scroll">
-    <EditorContent editor={editor} />
-</div>
+        <MenuBar editor={editor} />
+        <div className="editor-scroll">
+          <EditorContent editor={editor} />
+        </div>
       </div>
 
       {/* Actions: import left, export/copy right */}
@@ -286,7 +287,7 @@ export default function App() {
               onChange={handleDocxSelected}
               style={{ display: 'none' }}
             />
-            Import .docx
+            Import a Word document (.docx)
           </label>
         </div>
 
@@ -304,15 +305,15 @@ export default function App() {
       </div>
 
       {/* Live outputs accordion */}
-      <Accordion title="Live output (JSON, HTML & XML)" defaultOpen={false}>
+      <Accordion title="Live output (JSON, HTML, XML)" defaultOpen={false}>
         <div style={{ display: 'grid', gap: '12px' }}>
-          <Accordion title="ProseMirror JSON (live)" defaultOpen={false}>
+          <Accordion title="ProseMirror JSON" defaultOpen={false}>
             <pre>{JSON.stringify(editor.getJSON(), null, 2)}</pre>
           </Accordion>
-          <Accordion title="HTML (live)" defaultOpen={false}>
+          <Accordion title="HTML" defaultOpen={false}>
             <pre>{editor.getHTML()}</pre>
           </Accordion>
-          <Accordion title="XML (live)" defaultOpen={false}>
+          <Accordion title="XML" defaultOpen={false}>
             <pre>{xmlPreview}</pre>
           </Accordion>
         </div>
