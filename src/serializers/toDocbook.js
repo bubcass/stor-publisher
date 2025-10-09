@@ -1,12 +1,44 @@
 // src/serializers/toDocbook.js
+// ProseMirror JSON + metadata → DocBook 5 <article> (Oireachtas-enriched)
 
+/* ----------------- helpers ----------------- */
 const esc = (s = '') =>
   String(s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;')
 
-// ----- Inline marks → DocBook inline -----
+// Make clean xml:id slugs from section titles
+function slugifyTitle(title = '') {
+  return String(title)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .toLowerCase()
+    .slice(0, 60)
+}
+
+// Ensure xml:id uniqueness within a single document
+function makeUniqueIdFactory() {
+  const used = new Set()
+  return (base) => {
+    let id = base || 'section'
+    if (!used.has(id)) {
+      used.add(id)
+      return id
+    }
+    let i = 2
+    while (used.has(`${id}-${i}`)) i++
+    const unique = `${id}-${i}`
+    used.add(unique)
+    return unique
+  }
+}
+
+/* ------------- inline → DocBook ------------- */
 function inlineText(node) {
   if (!node) return ''
   if (node.type === 'text') {
@@ -15,10 +47,12 @@ function inlineText(node) {
       for (const m of node.marks) {
         if (m.type === 'bold' || m.type === 'strong') t = `<emphasis role="strong">${t}</emphasis>`
         else if (m.type === 'italic' || m.type === 'em') t = `<emphasis>${t}</emphasis>`
+        else if (m.type === 'underline') t = `<emphasis role="underline">${t}</emphasis>`
         else if (m.type === 'code') t = `<code>${t}</code>`
         else if (m.type === 'link' && m.attrs?.href) {
           const href = esc(m.attrs.href)
-          t = `<ulink url="${href}">${t}</ulink>`
+          const title = m.attrs.title ? ` xlink:title="${esc(m.attrs.title)}"` : ''
+          t = `<ulink url="${href}"${title}>${t}</ulink>`
         }
       }
     }
@@ -28,16 +62,12 @@ function inlineText(node) {
   return ''
 }
 
-// ----- Block helpers -----
-function paraFrom(node) {
-  return `<para>${inlineText(node)}</para>`
-}
-
+/* ------------- blocks → DocBook -------------- */
 function listToDocBook(node) {
   const tag = node.type === 'orderedList' ? 'orderedlist' : 'itemizedlist'
   const items = (node.content || []).map(li => {
     const parts = (li.content || []).map(ch => {
-      if (ch.type === 'paragraph') return paraFrom(ch)
+      if (ch.type === 'paragraph') return `<para>${inlineText(ch)}</para>`
       if (ch.type === 'bulletList' || ch.type === 'orderedList') return listToDocBook(ch)
       return ''
     }).join('')
@@ -46,7 +76,7 @@ function listToDocBook(node) {
   return `<${tag}>${items}</${tag}>`
 }
 
-// ----- Build a nested section tree from headings -----
+// Build a nested section tree from headings (h1–h6)
 function pmToSections(doc) {
   const blocks = doc?.content || []
   const root = { level: 0, title: null, children: [], paras: [], extras: [] }
@@ -62,34 +92,50 @@ function pmToSections(doc) {
       stack.push(sec)
       continue
     }
-    if (n.type === 'paragraph') { cur().paras.push(paraFrom(n)); continue }
+    if (n.type === 'paragraph') {
+      cur().paras.push(`<para>${inlineText(n)}</para>`)
+      continue
+    }
     if (n.type === 'blockquote') {
-      const ps = (n.content || []).map(paraFrom).join('')
+      const ps = (n.content || []).map(ch => `<para>${inlineText(ch)}</para>`).join('')
       cur().extras.push(`<blockquote>${ps}</blockquote>`)
       continue
     }
-    if (n.type === 'bulletList' || n.type === 'orderedList') { cur().extras.push(listToDocBook(n)); continue }
+    if (n.type === 'bulletList' || n.type === 'orderedList') {
+      cur().extras.push(listToDocBook(n))
+      continue
+    }
     if (n.type === 'codeBlock') {
       const code = esc(n.textContent || '')
       cur().extras.push(`<programlisting>${code}</programlisting>`)
       continue
     }
-    if (n.type === 'horizontalRule') { cur().extras.push(`<literallayout>—</literallayout>`); continue }
+    if (n.type === 'horizontalRule') {
+      cur().extras.push(`<literallayout>—</literallayout>`)
+      continue
+    }
+    // ignore hardBreak; it’s inline
   }
   return root
 }
 
-function sectionXml(sec) {
-  const body = [
-    sec.title != null ? `<title>${esc(sec.title)}</title>` : '',
-    ...sec.paras,
-    ...sec.extras,
-    ...sec.children.map(sectionXml),
-  ].join('\n')
-  return `<section>\n${body}\n</section>`
+function renderSectionsXml(root) {
+  const uniq = makeUniqueIdFactory()
+  function sectionXml(sec) {
+    const base = sec.title ? slugifyTitle(sec.title) : 'section'
+    const idAttr = ` xml:id="${uniq(base)}"`
+    const body = [
+      sec.title != null ? `<title>${esc(sec.title)}</title>` : '',
+      ...sec.paras,
+      ...sec.extras,
+      ...sec.children.map(sectionXml),
+    ].join('\n')
+    return `<section${idAttr}>\n${body}\n</section>`
+  }
+  return root.children.map(sectionXml).join('\n')
 }
 
-// ----- Metadata helpers -----
+/* ------------- metadata helpers -------------- */
 function peopleXml(list = [], tagName) {
   if (!list?.length) return ''
   return list.map(p => {
@@ -137,13 +183,25 @@ function unitRemark(unit) {
   return `<remark><para>${esc(bits)}</para></remark>`
 }
 
-// ----- Main: PM JSON + metadata -> DocBook 5 article -----
+function oorUnitXml(unit) {
+  if (!unit?.unit) return ''
+  const attrs = [
+    unit.unitCode ? `unitCode="${esc(unit.unitCode)}"` : null,
+    unit.committeeCode ? `committeeCode="${esc(unit.committeeCode)}"` : null,
+    unit.unitUri ? `unitUri="${esc(unit.unitUri)}"` : null,
+    unit.committeeUri ? `committeeUri="${esc(unit.committeeUri)}"` : null,
+  ].filter(Boolean).join(' ')
+  const attrStr = attrs ? ' ' + attrs : ''
+  return `<oor:unit${attrStr}>${esc(unit.unit)}</oor:unit>`
+}
+
+/* ----------------- main ----------------- */
 export function pmToDocbookArticle(pmJson, meta = {}) {
   const title = meta.title || 'Untitled research document'
   const subtitle = meta.subtitle
   const lang = meta.language || 'en'
 
-  // split authors vs other contributors (fallback: role==='author' = authors)
+  // Split authors vs other contributors
   const authors = (meta.contributors || []).filter(c => (c.role || 'author').toLowerCase() === 'author')
   const others  = (meta.contributors || []).filter(c => (c.role || '').toLowerCase() !== 'author')
 
@@ -151,7 +209,7 @@ export function pmToDocbookArticle(pmJson, meta = {}) {
     `<title>${esc(title)}</title>`,
     subtitle ? `<subtitle>${esc(subtitle)}</subtitle>` : '',
     peopleXml(authors, 'author'),
-    // Optional “Contributors” list (kept as a remark for readability)
+    // Optional Contributors list (human-readable)
     others.length ? `\n<remark>\n  <para>Contributors:</para>\n  <itemizedlist>\n${
       others.map(c => {
         const name = esc([c.given, c.family].filter(Boolean).join(' ') || c.name || '')
@@ -170,7 +228,7 @@ export function pmToDocbookArticle(pmJson, meta = {}) {
       ? `<pubidentifier type="${esc(meta.identifier.type)}">${esc(meta.identifier.value)}</pubidentifier>` : '',
     // Series
     seriesXml(meta.series),
-    // Date (published preferred; fallback to generic date)
+    // Date (prefer published)
     (meta.datePublished || meta.date)
       ? `<date>${esc((meta.datePublished || meta.date).slice(0,10))}</date>` : '',
     // Version + Status (revhistory)
@@ -179,31 +237,37 @@ export function pmToDocbookArticle(pmJson, meta = {}) {
     }${meta.status ? `<revremark>${esc(meta.status)}</revremark>` : ''}</revision></revhistory>` : '',
     // Publisher
     meta.publisher ? `<publisher><publishername>${esc(meta.publisher)}</publishername></publisher>` : '',
-    // Licence (DocBook-friendly as legalnotice)
+    // Licence
     meta.license ? `<legalnotice><para>${esc(meta.license)}</para></legalnotice>` : '',
     // Abstract
     meta.abstract ? `<abstract>${esc(meta.abstract)}</abstract>` : '',
     // Keywords
     keywordsetXml(meta.keywords || []),
-    // Unit / committee (remark)
+    // Structured oor:unit + a friendly remark
+    oorUnitXml(meta.unit),
     unitRemark(meta.unit),
   ].filter(Boolean).join('\n')
 
-  // Body as nested sections from headings
+  // Sections (with xml:id & de-dup)
   const tree = pmToSections(pmJson)
   const sectionsXml = tree.children.length
-    ? tree.children.map(sectionXml).join('\n')
-    : `<section><title>${esc(title)}</title>${paraFrom({ type:'paragraph', content: pmJson?.content || [] })}</section>`
+    ? renderSectionsXml(tree)
+    : (() => {
+        const id = slugifyTitle(title) || 'section'
+        return `<section xml:id="${id}"><title>${esc(title)}</title><para></para></section>`
+      })()
 
+  // Include oor namespace in the root so oor:unit is valid (harmless if unused)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <article xmlns="http://docbook.org/ns/docbook"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xmlns:xlink="http://www.w3.org/1999/xlink"
+         xmlns:oor="https://oireachtas.ie/ns/docbook-oireachtas"
          version="5.0"
          xml:lang="${esc(lang)}"
          xsi:schemaLocation="http://docbook.org/ns/docbook http://docbook.org/xml/5.0/rng/docbook.rng">
   <info>
-${infoParts.split('\\n').map(l => '    ' + l).join('\\n')}
+${infoParts.split('\n').map(l => '    ' + l).join('\n')}
   </info>
 
 ${sectionsXml}

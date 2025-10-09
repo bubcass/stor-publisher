@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schema xmlns="http://purl.oclc.org/dsdl/schematron"
+        xmlns:db="http://docbook.org/ns/docbook"
+        xmlns:xlink="http://www.w3.org/1999/xlink"
+        xmlns:oor="https://oireachtas.ie/ns/docbook-oireachtas">
+
+  <pattern id="article-core">
+    <rule context="db:article">
+      <assert test="@xml:lang">Article must carry @xml:lang.</assert>
+      <assert test="db:info">Article must have an <info> block.</assert>
+    </rule>
+  </pattern>
+
+  <pattern id="info-core">
+    <rule context="db:article/db:info">
+      <assert test="db:title">Title is required.</assert>
+      <assert test="db:legalnotice">Licence (legalnotice) is required.</assert>
+      <!-- Either authors in DocBook form or your contributors marked as role='author' -->
+      <assert test="db:author or count(//db:remark//db:para[contains(., 'Contributors')]) &gt;= 0">
+        Expect at least one author (DocBook <author>) or contributors list.
+      </assert>
+      <!-- Keywords: optional, but recommended -->
+    </rule>
+  </pattern>
+
+  <pattern id="versioning">
+    <!-- If status is 'published' in revremark, require date -->
+    <rule context="db:article/db:info">
+      <assert test="not(.//db:revremark='published') or db:date">
+        Published documents must include <date>.
+      </assert>
+    </rule>
+    <!-- If there is a revision, require a version number -->
+    <rule context="db:article/db:info/db:revhistory/db:revision">
+      <assert test="db:revnumber">Each revision requires a <revnumber> (version).</assert>
+    </rule>
+  </pattern>
+
+  <pattern id="status-vocabulary">
+    <!-- Keep your current statuses. Adjust as needed -->
+    <rule context="db:article/db:info//db:revremark">
+      <assert test=". = ('draft','in_review','published','archived')">
+        Status must be one of: draft, in_review, published, archived.
+      </assert>
+    </rule>
+  </pattern>
+
+  <pattern id="unit-context">
+    <!-- If you later emit oor:unit, you can validate attributes here -->
+    <rule context="db:article/db:info/oor:unit">
+      <assert test="@unitCode">oor:unit must have @unitCode.</assert>
+      <assert test="@unitCode = ('PBO','LIB','COMMS','COMMISSION','COM','OTHER')">
+        unitCode must be one of: PBO, LIB, COMMS, COMMISSION, COM, OTHER.
+      </assert>
+    </rule>
+  </pattern>
+</schema>

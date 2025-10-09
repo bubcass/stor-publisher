@@ -1,0 +1,30 @@
+# schemas/docbook-oireachtas.rnc
+# DocBook-Oireachtas profile driver (starting point).
+# For now we rely on:
+#  - docbook.rng (official) for structure
+#  - docbook-oireachtas.sch (Schematron) for business rules
+
+# If/when you want structural constraints or custom extension elements,
+# you'll extend this RNC and compile to a standalone RNG.
+
+default namespace db = "http://docbook.org/ns/docbook"
+namespace xlink = "http://www.w3.org/1999/xlink"
+namespace oor = "https://oireachtas.ie/ns/docbook-oireachtas"
+
+# Bring in the official DocBook schema
+external docbook = include "docbook.rnc"
+
+# Example custom element (optional): oor:unit
+# (DocBook usually allows foreign markup in many places already; this is here
+# only if you later want to constrain its attributes with RNG rather than Schematron.)
+oor.unit = element oor:unit {
+  attribute unitCode { "PBO" | "LIB" | "COMMS" | "COMMISSION" | "COM" | "OTHER" },
+  attribute committeeCode { text }?,
+  attribute unitUri { xsd:anyURI }?,
+  attribute committeeUri { xsd:anyURI }?,
+  text
+}
+
+# NOTE: To actually *insert* oor:unit into db:info via RNG, you'd
+# need to refine DocBook content models here. That's a later step.
+# For the POC, prefer Schematron to enforce presence/values.
