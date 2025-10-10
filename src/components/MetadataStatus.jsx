@@ -1,67 +1,98 @@
 // src/components/MetadataStatus.jsx
 import React from 'react'
 
-function formatContribs(contributors = []) {
-  if (!contributors.length) return 'No contributors yet'
-  const names = contributors.map(c => {
-    const fam = c.family?.trim() || ''
-    const giv = c.given?.trim() || ''
-    return fam && giv ? `${fam}, ${giv}` : (fam || giv || 'Unknown')
-  })
-  const head = names.slice(0, 2).join(' • ')
-  const extra = contributors.length - 2
-  return extra > 0 ? `${head} • +${extra} more` : head
-}
-
-function prettyStatus(s) {
-  if (!s) return ''
-  return s === 'in_review' ? 'In review' : s[0].toUpperCase() + s.slice(1)
-}
-
 export default function MetadataStatus({ report, metadata }) {
-  if (!report) return null
-  const { ok, errors = [] } = report
+  const errs = Array.isArray(report?.errors) ? report.errors : []
 
-  const title = (metadata?.title || 'Untitled research document').trim()
-  const version = (metadata?.version || '').trim()
-  const status = metadata?.status || 'draft'
-  const contribLine = formatContribs(metadata?.contributors || [])
+  // Normalize to { field?: string, message: string }
+  const norm = errs.map(e =>
+    typeof e === 'string' ? { message: e } : { field: e.field, message: e.message || String(e) },
+  )
 
-  const pillClass = ok && errors.length === 0 ? 'pill ok' : 'pill warn'
-  const icon = ok && errors.length === 0 ? '✅' : '⚠️'
-  const caption =
-    ok && errors.length === 0
-      ? 'Ready for export to Stór'
-      : `Needs attention — ${errors.length} issue${errors.length === 1 ? '' : 's'}`
+  const hasErrors = norm.length > 0
+  const status = (metadata?.status || 'draft').toLowerCase()
+  const version = metadata?.version || ''
+  const title = metadata?.title || 'Untitled research document'
+  const contribCount = Array.isArray(metadata?.contributors)
+    ? metadata.contributors.length
+    : 0
+
+  // Pill style and labels
+  const pillClass = hasErrors ? 'pill warn' : 'pill ok'
+  const pillTitle = hasErrors ? 'Metadata needs attention' : 'Metadata looks good'
+
+  // Status badge tone
+  const statusClass =
+    status === 'published'
+      ? 'pill-badge pill-badge--status status-published'
+      : status === 'in_review'
+      ? 'pill-badge pill-badge--status status-in_review'
+      : status === 'archived'
+      ? 'pill-badge pill-badge--status status-archived'
+      : 'pill-badge pill-badge--status status-draft'
 
   return (
     <div className="status-wrap">
-      <div className={pillClass} role="status" aria-live="polite">
-        <span className="pill-icon" aria-hidden>{icon}</span>
-        <span className="pill-main">
-          <span className="pill-title">
-            {title}
-            {version && <span className="pill-badge">v{version}</span>}
-            <span className={`pill-badge pill-badge--status status-${status}`}>
-              {prettyStatus(status)}
-            </span>
-          </span>
-          <span className="pill-meta">
-            <span className="pill-caption">{caption}</span>
-            <span className="pill-dot">•</span>
-            <span className="pill-contribs">{contribLine}</span>
-          </span>
-        </span>
-      </div>
+      <div className={pillClass}>
+        {/* Colored dot */}
+        <div
+          className="pill-dot-status"
+          style={{
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            backgroundColor: hasErrors ? '#eab308' : '#22c55e', // amber | green
+            marginRight: 10,
+            flexShrink: 0,
+          }}
+          aria-hidden
+        />
 
-      {errors.length > 0 && (
-        <details className="pill-errors">
-          <summary>Show details</summary>
-          <ul>
-            {errors.map((e, i) => <li key={i}>{e}</li>)}
-          </ul>
-        </details>
-      )}
+        <div className="pill-main">
+          <div className="pill-title">
+            {pillTitle}
+            <span className={statusClass} title={`Status: ${status}`}>
+              {status.replace('_', ' ')}
+            </span>
+            {version && (
+              <span className="pill-badge" title="Version">{`v${version}`}</span>
+            )}
+          </div>
+
+          <div className="pill-meta">
+            <span title="Document title">{title}</span>
+            <span className="pill-dot">•</span>
+            <span title="Contributors">
+              {contribCount} contributor{contribCount === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          {hasErrors && (
+            <div className="pill-errors">
+              <details open={true}>
+                <summary>Show details ({norm.length})</summary>
+                <ul>
+                  {norm.map((e, i) => (
+                    <li key={i}>
+                      {e.field ? <strong>{humanize(e.field)}:</strong> : null}{' '}
+                      {e.message || 'Required field is missing.'}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
+}
+
+// Simple label prettifier for field keys like "datePublished" → "Date published"
+function humanize(k = '') {
+  if (!k) return ''
+  return String(k)
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (m) => m.toUpperCase())
 }
