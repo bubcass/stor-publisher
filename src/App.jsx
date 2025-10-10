@@ -13,6 +13,12 @@ import TextAlign from '@tiptap/extension-text-align'
 import Image from '@tiptap/extension-image'
 import * as mammoth from 'mammoth/mammoth.browser'
 
+// ✅ Tables (Tiptap v2)
+import Table from '@tiptap/extension-table'
+import TableRow from '@tiptap/extension-table-row'
+import TableCell from '@tiptap/extension-table-cell'
+import TableHeader from '@tiptap/extension-table-header'
+
 import MenuBar from './components/MenuBar.jsx'
 import Accordion from './components/Accordion.jsx'
 import MetadataStatus from './components/MetadataStatus.jsx'
@@ -26,6 +32,7 @@ import { extractDocxMetadata } from './utils/extractDocxMetadata.js'
 import { wrapHtml } from './serializers/htmlTemplate.js'
 import { pmJsonToXml } from './serializers/toXml.js' // House XML (preview)
 import { pmToDocbookArticle } from './serializers/toDocbook.js'
+import { downloadFile } from './utils/download.js'
 
 /** Safe filename slug from a title (with fallback) */
 function safeFileSlug(input = '') {
@@ -163,6 +170,15 @@ export default function App() {
         history: false,
         heading: { levels: [1, 2, 3, 4] },
       }),
+      // ✅ Table support (keep after StarterKit)
+      Table.configure({
+        resizable: true,
+        lastColumnResizable: true,
+      }),
+      TableRow,
+      TableHeader,
+      TableCell,
+
       Placeholder.configure({ placeholder: 'Write something… or import a .docx' }),
       Underline,
       Highlight,
@@ -203,43 +219,31 @@ export default function App() {
   const validation = useMemo(() => validateMetadata(metadata), [metadata])
   const canExport = validation.ok && validation.errors.length === 0
 
-  // --- Refs ---
+  // --- File input ref ---
   const fileInputRef = useRef(null)
-  const dlRef = useRef(null) // persistent hidden <a> for reliable downloads
 
-  // --- Export: HTML (wrapped + JSON-LD) via persistent <a> + data URL ---
+  // --- Export: HTML (wrapped + JSON-LD) ---
   const handleExportHTML = () => {
-    if (!editor || !dlRef.current) return
+    if (!editor) return
     const body = editor.getHTML()
     const page = wrapHtml(body, metadata) // injects JSON-LD + formatting
     const base = safeFileSlug(metadata.title)
     const name = metadata.version
       ? `${base}-v${String(metadata.version).replace(/\s+/g, '')}`
       : base
-
-    const a = dlRef.current
-    a.download = `${name}.html`
-    a.href = `data:text/html;charset=utf-8,${encodeURIComponent(page)}`
-    a.click()
-    // ensure the next click is a different navigation target
-    a.href = 'about:blank'
+    downloadFile(page, `${name}.html`, 'text/html;charset=utf-8')
   }
 
-  // --- Export: DocBook 5 article (also via persistent <a>) ---
+  // --- Export: DocBook 5 article ---
   const handleExportDocBook = () => {
-    if (!editor || !dlRef.current) return
+    if (!editor) return
     const json = editor.getJSON()
     const docbook = pmToDocbookArticle(json, metadata)
     const base = safeFileSlug(metadata.title)
     const name = metadata.version
       ? `${base}-v${String(metadata.version).replace(/\s+/g, '')}`
       : base
-
-    const a = dlRef.current
-    a.download = `${name}.docbook.xml`
-    a.href = `data:application/xml;charset=utf-8,${encodeURIComponent(docbook)}`
-    a.click()
-    a.href = 'about:blank'
+    downloadFile(docbook, `${name}.docbook.xml`, 'application/xml;charset=utf-8')
   }
 
   // --- Import: DOCX ---
@@ -364,9 +368,6 @@ export default function App() {
           <EditorContent editor={editor} />
         </div>
       </div>
-
-      {/* Hidden persistent download anchor (reused every click) */}
-      <a ref={dlRef} style={{ display: 'none' }} href="about:blank" download="download.txt">.</a>
 
       {/* Actions: import left, export/copy right */}
       <div className="actions">
