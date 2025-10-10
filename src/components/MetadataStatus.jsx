@@ -19,7 +19,7 @@ export default function MetadataStatus({ report, metadata }) {
 
   // Pill style and labels
   const pillClass = hasErrors ? 'pill warn' : 'pill ok'
-  const pillTitle = hasErrors ? 'Metadata needs attention' : 'Metadata looks good'
+  const pillTitle = hasErrors ? 'Metadata needs attention' : 'Ready for publication to Stór'
 
   // Status badge tone
   const statusClass =
