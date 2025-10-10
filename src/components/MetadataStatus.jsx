@@ -13,9 +13,15 @@ export default function MetadataStatus({ report, metadata }) {
   const status = (metadata?.status || 'draft').toLowerCase()
   const version = metadata?.version || ''
   const title = metadata?.title || 'Untitled research document'
-  const contribCount = Array.isArray(metadata?.contributors)
-    ? metadata.contributors.length
-    : 0
+
+  // ✅ Build contributor names list
+  const contribs = Array.isArray(metadata?.contributors) ? metadata.contributors : []
+  const contribNames = contribs
+    .map(c => [c.given, c.family].filter(Boolean).join(' ').trim())
+    .filter(Boolean)
+  const contribText = contribNames.length
+    ? `Contributors: ${contribNames.join(', ')}`
+    : 'No contributors listed'
 
   // Pill style and labels
   const pillClass = hasErrors ? 'pill warn' : 'pill ok'
@@ -59,12 +65,11 @@ export default function MetadataStatus({ report, metadata }) {
             )}
           </div>
 
+          {/* ✅ Title + contributor names */}
           <div className="pill-meta">
             <span title="Document title">{title}</span>
             <span className="pill-dot">•</span>
-            <span title="Contributors">
-              {contribCount} contributor{contribCount === 1 ? '' : 's'}
-            </span>
+            <span title="Contributors">{contribText}</span>
           </div>
 
           {hasErrors && (
@@ -88,7 +93,7 @@ export default function MetadataStatus({ report, metadata }) {
   )
 }
 
-// Simple label prettifier for field keys like "datePublished" → "Date published"
+// Simple label prettifier for field keys like "datePublished" → "Date Published"
 function humanize(k = '') {
   if (!k) return ''
   return String(k)
