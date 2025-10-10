@@ -24,9 +24,8 @@ import { validateMetadata } from './metadata/validate.js'
 import { unitFromCode } from './utils/imprint.js'
 import { extractDocxMetadata } from './utils/extractDocxMetadata.js'
 import { wrapHtml } from './serializers/htmlTemplate.js'
-import { pmJsonToXml } from './serializers/toXml.js' // kept for preview
+import { pmJsonToXml } from './serializers/toXml.js' // House XML (preview)
 import { pmToDocbookArticle } from './serializers/toDocbook.js'
-import { downloadFile } from './utils/download.js'
 
 /** Safe filename slug from a title (with fallback) */
 function safeFileSlug(input = '') {
@@ -204,31 +203,43 @@ export default function App() {
   const validation = useMemo(() => validateMetadata(metadata), [metadata])
   const canExport = validation.ok && validation.errors.length === 0
 
-  // --- File input ref ---
+  // --- Refs ---
   const fileInputRef = useRef(null)
+  const dlRef = useRef(null) // persistent hidden <a> for reliable downloads
 
-  // --- Export: HTML (wrapped + JSON-LD) ---
+  // --- Export: HTML (wrapped + JSON-LD) via persistent <a> + data URL ---
   const handleExportHTML = () => {
-    if (!editor) return
+    if (!editor || !dlRef.current) return
     const body = editor.getHTML()
     const page = wrapHtml(body, metadata) // injects JSON-LD + formatting
     const base = safeFileSlug(metadata.title)
     const name = metadata.version
       ? `${base}-v${String(metadata.version).replace(/\s+/g, '')}`
       : base
-    downloadFile(page, `${name}.html`, 'text/html;charset=utf-8')
+
+    const a = dlRef.current
+    a.download = `${name}.html`
+    a.href = `data:text/html;charset=utf-8,${encodeURIComponent(page)}`
+    a.click()
+    // ensure the next click is a different navigation target
+    a.href = 'about:blank'
   }
 
-  // --- Export: DocBook 5 article ---
+  // --- Export: DocBook 5 article (also via persistent <a>) ---
   const handleExportDocBook = () => {
-    if (!editor) return
+    if (!editor || !dlRef.current) return
     const json = editor.getJSON()
     const docbook = pmToDocbookArticle(json, metadata)
     const base = safeFileSlug(metadata.title)
     const name = metadata.version
       ? `${base}-v${String(metadata.version).replace(/\s+/g, '')}`
       : base
-    downloadFile(docbook, `${name}.docbook.xml`, 'application/xml;charset=utf-8')
+
+    const a = dlRef.current
+    a.download = `${name}.docbook.xml`
+    a.href = `data:application/xml;charset=utf-8,${encodeURIComponent(docbook)}`
+    a.click()
+    a.href = 'about:blank'
   }
 
   // --- Import: DOCX ---
@@ -354,6 +365,9 @@ export default function App() {
         </div>
       </div>
 
+      {/* Hidden persistent download anchor (reused every click) */}
+      <a ref={dlRef} style={{ display: 'none' }} href="about:blank" download="download.txt">.</a>
+
       {/* Actions: import left, export/copy right */}
       <div className="actions">
         <div className="actions-left">
@@ -370,15 +384,16 @@ export default function App() {
         </div>
 
         <div className="actions-right">
-          <button onClick={handleExportHTML}>Export HTML</button>
+          <button type="button" onClick={handleExportHTML}>Export HTML</button>
           <button
+            type="button"
             onClick={handleExportDocBook}
             disabled={!canExport}
             title={!canExport ? 'Fix required metadata first' : 'Export DocBook XML'}
           >
             Export DocBook XML
           </button>
-          <button onClick={handleCopyJSON}>Copy JSON</button>
+          <button type="button" onClick={handleCopyJSON}>Copy JSON</button>
         </div>
       </div>
 
