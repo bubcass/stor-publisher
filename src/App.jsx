@@ -13,7 +13,7 @@ import TextAlign from '@tiptap/extension-text-align'
 import Image from '@tiptap/extension-image'
 import * as mammoth from 'mammoth/mammoth.browser'
 
-// ✅ Tables (Tiptap v2)
+// ✅ Tiptap v2 table extensions
 import Table from '@tiptap/extension-table'
 import TableRow from '@tiptap/extension-table-row'
 import TableCell from '@tiptap/extension-table-cell'
@@ -30,18 +30,17 @@ import { validateMetadata } from './metadata/validate.js'
 import { unitFromCode } from './utils/imprint.js'
 import { extractDocxMetadata } from './utils/extractDocxMetadata.js'
 import { wrapHtml } from './serializers/htmlTemplate.js'
-import { pmJsonToXml } from './serializers/toXml.js' // House XML (preview)
-import { pmToDocbookArticle } from './serializers/toDocbook.js'
+import { pmJsonToXml } from './serializers/toXml.js'          // House XML (now with tables)
+import { pmToDocbookArticle } from './serializers/toDocbook.js' // DocBook (now with tables)
 import { downloadFile } from './utils/download.js'
 
 /** Safe filename slug from a title (with fallback) */
 function safeFileSlug(input = '') {
   const base = String(input).trim() || 'Untitled research document'
   const slug =
-    base
-      .normalize('NFKD')
+    base.normalize('NFKD')
       .replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-zA-Z0-9-]+/g, '-')   // no dots in base name
+      .replace(/[^a-zA-Z0-9-]+/g, '-')
       .replace(/-+/g, '-')
       .replace(/^[-]+|[-]+$/g, '')
       .toLowerCase()
@@ -51,112 +50,58 @@ function safeFileSlug(input = '') {
 
 /** Prefer meta-aware XML, fall back for older serializer signatures */
 function buildXml(docJson, meta) {
-  try {
-    return pmJsonToXml(docJson, meta)
-  } catch (e) {
-    try {
-      return pmJsonToXml(docJson)
-    } catch {
-      throw e
-    }
-  }
+  try { return pmJsonToXml(docJson, meta) }
+  catch (e) { try { return pmJsonToXml(docJson) } catch { throw e } }
 }
 
-/** Parse semicolon-separated contributors:
- * "Family, Given|role|unitOrCommitteeCode|email?|orcid?"
- */
+/** Parse semicolon-separated contributors: "Family, Given|role|unitOrCommitteeCode|email?|orcid?" */
 function parseContributors(raw, fallbackUnitCode, fallbackCommitteeCode) {
   if (!raw) return []
-  return raw
-    .split(';')
-    .map(s => s.trim())
-    .filter(Boolean)
-    .map(tok => {
-      const [name, role = 'author', unitTok = '', email = '', orcid = ''] = tok
-        .split('|')
-        .map(t => t.trim())
+  return raw.split(';').map(s => s.trim()).filter(Boolean).map(tok => {
+    const [name, role = 'author', unitTok = '', email = '', orcid = ''] =
+      tok.split('|').map(t => t.trim())
+    let given = '', family = name
+    if (name.includes(',')) { const [fam, giv] = name.split(',').map(t => t.trim()); family = fam; given = giv }
+    else if (name.includes(' ')) { const parts = name.split(' '); given = parts[0]; family = parts.slice(1).join(' ') }
 
-      // name split
-      let given = '', family = name
-      if (name.includes(',')) {
-        const [fam, giv] = name.split(',').map(t => t.trim())
-        family = fam
-        given = giv
-      } else if (name.includes(' ')) {
-        const parts = name.split(' ')
-        given = parts[0]
-        family = parts.slice(1).join(' ')
-      }
+    const isCommitteeToken = unitTok?.toUpperCase?.().startsWith('COM-')
+    const unitCode = isCommitteeToken ? 'COM' : (unitTok || fallbackUnitCode || 'OTHER').toUpperCase()
+    const committeeCode = isCommitteeToken ? unitTok : (unitCode === 'COM' ? (fallbackCommitteeCode || undefined) : undefined)
 
-      const isCommitteeToken = unitTok?.toUpperCase?.().startsWith('COM-')
-      const unitCode = isCommitteeToken
-        ? 'COM'
-        : (unitTok || fallbackUnitCode || 'OTHER').toUpperCase()
-      const committeeCode = isCommitteeToken
-        ? unitTok
-        : unitCode === 'COM'
-          ? (fallbackCommitteeCode || undefined)
-          : undefined
-
-      return {
-        role: role.toLowerCase(),
-        given,
-        family,
-        email: email || undefined,
-        orcid: orcid || undefined,
-        affiliation: {
-          org: 'Houses of the Oireachtas',
-          unitCode,
-          unit: unitFromCode(unitCode),
-          committeeCode,
-          country: 'IE',
-        },
-      }
-    })
+    return {
+      role: (role || 'author').toLowerCase(),
+      given, family,
+      email: email || undefined,
+      orcid: orcid || undefined,
+      affiliation: {
+        org: 'Houses of the Oireachtas',
+        unitCode,
+        unit: unitFromCode(unitCode),
+        committeeCode,
+        country: 'IE',
+      },
+    }
+  })
 }
 
 /** Build authors (contributors with role 'author') from DOCX props */
 function parseAuthorsFromDocx(core = {}, custom = {}) {
-  const raw =
-    custom.Authors ||
-    custom.Author ||
-    core.creator ||
-    core.author ||
-    ''
-
-  const tokens = String(raw)
-    .split(/;|\n|,/)
-    .map(s => s.trim())
-    .filter(Boolean)
-
+  const raw = custom.Authors || custom.Author || core.creator || core.author || ''
+  const tokens = String(raw).split(/;|\n|,/).map(s => s.trim()).filter(Boolean)
   return tokens.map(name => {
     let given = '', family = name
-    if (name.includes(',')) {
-      const [fam, giv] = name.split(',').map(t => t.trim())
-      family = fam; given = giv
-    } else if (name.includes(' ')) {
-      const parts = name.split(' ')
-      given = parts[0]; family = parts.slice(1).join(' ')
-    }
-    return {
-      role: 'author',
-      given,
-      family,
-      affiliation: { org: 'Houses of the Oireachtas' },
-    }
+    if (name.includes(',')) { const [fam, giv] = name.split(',').map(t => t.trim()); family = fam; given = giv }
+    else if (name.includes(' ')) { const parts = name.split(' '); given = parts[0]; family = parts.slice(1).join(' ') }
+    return { role: 'author', given, family, affiliation: { org: 'Houses of the Oireachtas' } }
   })
 }
 
 /** De-duplicate contributors by normalized given|family|role */
 function dedupeContributors(list = []) {
-  const seen = new Set()
-  const out = []
+  const seen = new Set(), out = []
   for (const c of list) {
     const key = `${(c.given||'').trim().toLowerCase()}|${(c.family||'').trim().toLowerCase()}|${(c.role||'').toLowerCase()}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      out.push(c)
-    }
+    if (!seen.has(key)) { seen.add(key); out.push(c) }
   }
   return out
 }
@@ -166,31 +111,18 @@ export default function App() {
   const extensions = useMemo(
     () => [
       History.configure({ depth: 100, newGroupDelay: 500 }),
-      StarterKit.configure({
-        history: false,
-        heading: { levels: [1, 2, 3, 4] },
-      }),
-      // ✅ Table support (keep after StarterKit)
-      Table.configure({
-        resizable: true,
-        lastColumnResizable: true,
-      }),
+      StarterKit.configure({ history: false, heading: { levels: [1, 2, 3, 4] } }),
+      // ✅ Table support
+      Table.configure({ resizable: true, lastColumnResizable: true }),
       TableRow,
       TableHeader,
       TableCell,
 
       Placeholder.configure({ placeholder: 'Write something… or import a .docx' }),
-      Underline,
-      Highlight,
-      Link.configure({
-        autolink: true,
-        openOnClick: true,
-        linkOnPaste: true,
-        protocols: ['http', 'https', 'mailto'],
-      }),
-      Superscript,
-      Subscript,
-      TextAlign.configure({ types: ['heading', 'paragraph'] }),
+      Underline, Highlight,
+      Link.configure({ autolink: true, openOnClick: true, linkOnPaste: true, protocols: ['http','https','mailto'] }),
+      Superscript, Subscript,
+      TextAlign.configure({ types: ['heading','paragraph'] }),
       Image.configure({ inline: false }),
     ],
     [],
@@ -211,26 +143,23 @@ export default function App() {
       version: '',
       keywords: [],
       contributors: [],
-      // unit optional until set or imported
     }),
   )
 
-  // --- Memoized validation to prevent input "bounce" ---
+  // --- Memoized validation ---
   const validation = useMemo(() => validateMetadata(metadata), [metadata])
   const canExport = validation.ok && validation.errors.length === 0
 
-  // --- File input ref ---
+  // --- Refs ---
   const fileInputRef = useRef(null)
 
   // --- Export: HTML (wrapped + JSON-LD) ---
   const handleExportHTML = () => {
     if (!editor) return
     const body = editor.getHTML()
-    const page = wrapHtml(body, metadata) // injects JSON-LD + formatting
+    const page = wrapHtml(body, metadata)
     const base = safeFileSlug(metadata.title)
-    const name = metadata.version
-      ? `${base}-v${String(metadata.version).replace(/\s+/g, '')}`
-      : base
+    const name = metadata.version ? `${base}-v${String(metadata.version).replace(/\s+/g,'')}` : base
     downloadFile(page, `${name}.html`, 'text/html;charset=utf-8')
   }
 
@@ -240,9 +169,7 @@ export default function App() {
     const json = editor.getJSON()
     const docbook = pmToDocbookArticle(json, metadata)
     const base = safeFileSlug(metadata.title)
-    const name = metadata.version
-      ? `${base}-v${String(metadata.version).replace(/\s+/g, '')}`
-      : base
+    const name = metadata.version ? `${base}-v${String(metadata.version).replace(/\s+/g,'')}` : base
     downloadFile(docbook, `${name}.docbook.xml`, 'application/xml;charset=utf-8')
   }
 
@@ -263,6 +190,7 @@ export default function App() {
             "p[style-name='Heading 2'] => h2",
             "p[style-name='Heading 3'] => h3",
             "p[style-name='Heading 4'] => h4",
+            // Tables come through as HTML tables; Tiptap now supports them
           ],
           includeDefaultStyleMap: true,
         },
@@ -272,17 +200,14 @@ export default function App() {
       // 2) Metadata extraction
       const { core, custom } = await extractDocxMetadata(arrayBuffer)
 
-      // 3) Map to our canonical metadata (Unit instead of Imprint); accept UnitCode or ImprintCode
+      // 3) Map to canonical metadata (Unit instead of Imprint); accept UnitCode or ImprintCode
       const rawUnitCode = (custom.UnitCode || custom.ImprintCode || 'OTHER').toUpperCase()
       const unit = (custom.UnitCode || custom.ImprintCode)
         ? { unitCode: rawUnitCode, unit: unitFromCode(rawUnitCode) }
         : undefined
 
-      // Existing contributors from custom "Contributors" field
       const contributorsFromCustom = parseContributors(custom.Contributors, unit?.unitCode, undefined)
-      // Authors from DOCX core/custom
       const authorsFromProps = parseAuthorsFromDocx(core, custom)
-      // Merge: if explicit contributors exist, merge authors; otherwise authors alone
       const mergedContribs = contributorsFromCustom.length
         ? dedupeContributors([...contributorsFromCustom, ...authorsFromProps])
         : authorsFromProps
@@ -299,20 +224,14 @@ export default function App() {
         doi: custom.DOI || metadata.doi,
         license: custom.License || metadata.license,
         keywords: (custom.Keywords || core.keywords || metadata.keywords || [])
-          .toString()
-          .split(',')
-          .map(s => s.trim())
-          .filter(Boolean),
+          .toString().split(',').map(s => s.trim()).filter(Boolean),
         publisher: 'Houses of the Oireachtas',
         unit,
         contributors: mergedContribs,
       }
 
-      try {
-        setMetadata(MetadataSchema.parse({ ...metadata, ...mapped }))
-      } catch {
-        setMetadata(prev => ({ ...prev, ...mapped }))
-      }
+      try { setMetadata(MetadataSchema.parse({ ...metadata, ...mapped })) }
+      catch { setMetadata(prev => ({ ...prev, ...mapped })) }
     } catch (err) {
       console.error(err)
       alert('Failed to import .docx: ' + (err?.message || String(err)))
@@ -327,14 +246,11 @@ export default function App() {
     await navigator.clipboard.writeText(JSON.stringify(editor.getJSON(), null, 2))
   }
 
-  // --- Live XML preview (house schema) ---
+  // --- Live XML preview (House schema) ---
   const xmlPreview = useMemo(() => {
     if (!editor) return ''
-    try {
-      return buildXml(editor.getJSON(), metadata)
-    } catch (e) {
-      return `<!-- XML preview error: ${e?.message || e} -->`
-    }
+    try { return buildXml(editor.getJSON(), metadata) }
+    catch (e) { return `<!-- XML preview error: ${e?.message || e} -->` }
   }, [editor, metadata])
 
   if (!editor) return <p style={{ padding: 12, fontFamily: 'system-ui' }}>Loading editor…</p>
@@ -369,7 +285,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Actions: import left, export/copy right */}
+      {/* Actions */}
       <div className="actions">
         <div className="actions-left">
           <label className="file-label">

@@ -19,6 +19,8 @@ function textWithMarks(node) {
         if (m.type === 'bold' || m.type === 'strong') txt = `<b>${txt}</b>`
         else if (m.type === 'italic' || m.type === 'em') txt = `<i>${txt}</i>`
         else if (m.type === 'code') txt = `<code>${txt}</code>`
+        else if (m.type === 'underline') txt = `<u>${txt}</u>`
+        else if (m.type === 'strike') txt = `<s>${txt}</s>`
         else if (m.type === 'link' && m.attrs?.href) {
           const href = esc(m.attrs.href)
           const title = m.attrs.title ? ` title="${esc(m.attrs.title)}"` : ''
@@ -34,15 +36,33 @@ function textWithMarks(node) {
   return ''
 }
 
+// Serialize table-related nodes
+function serializeTable(node) {
+  // expected structure: table -> tableRow -> (tableHeader|tableCell)
+  const rows = (node.content || []).map(row => {
+    if (row.type !== 'tableRow') return ''
+    const cells = (row.content || []).map(cell => {
+      if (cell.type === 'tableHeader' || cell.type === 'tableCell') {
+        const inner = (cell.content || []).map(serializeBlock).join('') || textWithMarks(cell)
+        const tag = cell.type === 'tableHeader' ? 'th' : 'td'
+        return `<${tag}>${inner}</${tag}>`
+      }
+      return ''
+    }).join('')
+    return `<row>${cells}</row>`
+  }).join('')
+  return `<table>${rows}</table>`
+}
+
 // block serializer
 function serializeBlock(node) {
   const C = (node.content || []).map(serializeBlock).join('')
+
   switch (node.type) {
     case 'paragraph':
       return `<p>${textWithMarks(node)}</p>`
 
     case 'heading': {
-      // If headings leak through (no custom Section extension), serialize as <section><title>…</title>
       const title = textWithMarks(node) || 'Untitled'
       return `<section><title>${title}</title></section>`
     }
@@ -70,7 +90,11 @@ function serializeBlock(node) {
     case 'hardBreak':
       return `<br/>`
 
-    // If you later add custom nodes (section, figure, table…), add cases here.
+    // ✅ Tables
+    case 'table':
+      return serializeTable(node)
+
+    // text passthrough
     default:
       if (node.type === 'text') return textWithMarks(node)
       return C
@@ -80,43 +104,39 @@ function serializeBlock(node) {
 // ---------- metadata helpers ----------
 function contributorsXml(list = []) {
   if (!list.length) return ''
-  const items = list
-    .map((c) => {
-      const role = esc(c.role || 'contributor')
-      const given = esc(c.given || '')
-      const family = esc(c.family || '')
-      const email = c.email ? `<email>${esc(c.email)}</email>` : ''
-      const orcid = c.orcid ? `<orcid>${esc(c.orcid)}</orcid>` : ''
-      const uri = c.uri ? `<uri>${esc(c.uri)}</uri>` : ''
-      const corresponding = c.corresponding ? ` corresponding="true"` : ''
+  const items = list.map((c) => {
+    const role = esc(c.role || 'contributor')
+    const given = esc(c.given || '')
+    const family = esc(c.family || '')
+    const email = c.email ? `<email>${esc(c.email)}</email>` : ''
+    const orcid = c.orcid ? `<orcid>${esc(c.orcid)}</orcid>` : ''
+    const uri = c.uri ? `<uri>${esc(c.uri)}</uri>` : ''
+    const corresponding = c.corresponding ? ` corresponding="true"` : ''
 
-      let aff = ''
-      if (c.affiliation) {
-        const a = c.affiliation
-        const attrs = []
-        if (a.unitCode) attrs.push(`unitCode="${esc(a.unitCode)}"`)
-        if (a.committeeCode) attrs.push(`committeeCode="${esc(a.committeeCode)}"`)
-        if (a.unitUri) attrs.push(`unitUri="${esc(a.unitUri)}"`)
-        if (a.committeeUri) attrs.push(`committeeUri="${esc(a.committeeUri)}"`)
-        if (a.orgId) attrs.push(`orgId="${esc(a.orgId)}"`)
-        const country = a.country ? `<country>${esc(a.country)}</country>` : ''
-        const unitText = a.unit ? esc(a.unit) : ''
-        aff = `<affiliation ${attrs.join(' ')}>
+    let aff = ''
+    if (c.affiliation) {
+      const a = c.affiliation
+      const attrs = [`unitCode="${esc(a.unitCode || '')}"`]
+      if (a.committeeCode) attrs.push(`committeeCode="${esc(a.committeeCode)}"`)
+      if (a.unitUri) attrs.push(`unitUri="${esc(a.unitUri)}"`)
+      if (a.committeeUri) attrs.push(`committeeUri="${esc(a.committeeUri)}"`)
+      if (a.orgId) attrs.push(`orgId="${esc(a.orgId)}"`)
+      const country = a.country ? `<country>${esc(a.country)}</country>` : ''
+      aff = `<affiliation ${attrs.join(' ')}>
   <org>Houses of the Oireachtas</org>
-  ${unitText ? `<unit>${unitText}</unit>` : ''}
+  <unit>${esc(a.unit || '')}</unit>
   ${country}
 </affiliation>`
-      }
+    }
 
-      return `<contrib role="${role}"${corresponding}>
+    return `<contrib role="${role}"${corresponding}>
   <name><given>${given}</given><family>${family}</family></name>
   ${aff}
   ${orcid}
   ${email}
   ${uri}
 </contrib>`
-    })
-    .join('\n')
+  }).join('\n')
 
   return `<contributors>\n${items}\n</contributors>`
 }
@@ -128,68 +148,48 @@ function keywordsXml(list = []) {
 
 function relatedXml(list = []) {
   if (!list.length) return ''
-  const items = list
-    .map((r) => `<item relation="${esc(r.relation)}" uri="${esc(r.uri)}"/>`)
-    .join('\n')
+  const items = list.map((r) => `<item relation="${esc(r.relation)}" uri="${esc(r.uri)}"/>`).join('\n')
   return `<related>\n${items}\n</related>`
 }
 
 function dataLinksXml(list = []) {
   if (!list.length) return ''
-  const items = list
-    .map((d) => `<item label="${esc(d.label)}" uri="${esc(d.uri)}"/>`)
-    .join('\n')
+  const items = list.map((d) => `<item label="${esc(d.label)}" uri="${esc(d.uri)}"/>`).join('\n')
   return `<dataLinks>\n${items}\n</dataLinks>`
 }
 
 // ---------- main ----------
 export function pmJsonToXml(docJson, meta = {}) {
-  // Backward-compat: accept meta.imprint but prefer meta.unit
-  const unitOrImprint = meta.unit || meta.imprint
-
-  // sensible defaults so callers can omit meta during the transition
   const M = {
     schemaVersion: meta.schemaVersion || 'researchDocument@0.2',
-    title: meta.title || 'Untitled',
+    title: meta.title || 'Untitled research document',
     subtitle: meta.subtitle,
     abstract: meta.abstract,
     language: meta.language || 'en',
     status: meta.status || 'draft',
-
-    // Defaults you requested
-    version: meta.version && String(meta.version).trim() ? meta.version : '0.1',
+    version: meta.version,
     datePublished: meta.datePublished,
     dateModified: meta.dateModified,
     doi: meta.doi,
     series: meta.series, // {name, number}
-
-    license:
-      meta.license && String(meta.license).trim()
-        ? meta.license
-        : 'Oireachtas (Open Data) PSI Licence',
-
+    license: meta.license,
     keywords: meta.keywords || [],
     contributors: meta.contributors || [],
     related: meta.related || [],
     dataLinks: meta.dataLinks || [],
-    publisher: meta.publisher || 'Houses of the Oireachtas',
-
-    // renamed: use meta.unit going forward
-    unit: unitOrImprint, // { unit, unitCode, committeeCode?, unitUri?, committeeUri? }
+    publisher: meta.publisher,
+    imprint: meta.imprint || meta.unit, // back-compat if you renamed to unit
   }
 
   const body = (docJson?.content || []).map(serializeBlock).join('')
 
-  // unit / publisher
-  const unitStr = M.unit
+  const imprintStr = M.imprint
     ? (() => {
-        const attrs = []
-        if (M.unit.unitCode) attrs.push(`unitCode="${esc(M.unit.unitCode)}"`)
-        if (M.unit.committeeCode) attrs.push(`committeeCode="${esc(M.unit.committeeCode)}"`)
-        if (M.unit.unitUri) attrs.push(`unitUri="${esc(M.unit.unitUri)}"`)
-        if (M.unit.committeeUri) attrs.push(`committeeUri="${esc(M.unit.committeeUri)}"`)
-        const label = M.unit.unit ? esc(M.unit.unit) : ''
-        return `    <unit ${attrs.join(' ')}>${label}</unit>\n`
+        const attrs = [`unitCode="${esc(M.imprint.unitCode || '')}"`]
+        if (M.imprint.committeeCode) attrs.push(`committeeCode="${esc(M.imprint.committeeCode)}"`)
+        if (M.imprint.unitUri) attrs.push(`unitUri="${esc(M.imprint.unitUri)}"`)
+        if (M.imprint.committeeUri) attrs.push(`committeeUri="${esc(M.imprint.committeeUri)}"`)
+        return `    <imprint ${attrs.join(' ')}">${esc(M.imprint.unit || '')}</imprint>\n`
       })()
     : ''
 
@@ -205,7 +205,6 @@ export function pmJsonToXml(docJson, meta = {}) {
   const datePubStr = M.datePublished ? `    <datePublished>${esc(M.datePublished)}</datePublished>\n` : ''
   const dateModStr = M.dateModified ? `    <dateModified>${esc(M.dateModified)}</dateModified>\n` : ''
   const publisherStr = M.publisher ? `    <publisher>${esc(M.publisher)}</publisher>\n` : ''
-
   const keywordsStr = keywordsXml(M.keywords)
   const contributorsStr = contributorsXml(M.contributors)
   const relatedStr = relatedXml(M.related)
@@ -216,10 +215,9 @@ export function pmJsonToXml(docJson, meta = {}) {
     <title>${esc(M.title)}</title>
 ${subtitleStr}${abstractStr}    <status>${esc(M.status)}</status>
     <language>${esc(M.language)}</language>
-${versionStr}${datePubStr}${dateModStr}${doiStr}${seriesStr}${licenseStr}${publisherStr}${unitStr}${keywordsStr ? '    ' + keywordsStr.replace(/\n/g, '\n    ') + '\n' : ''}${contributorsStr ? '    ' + contributorsStr.replace(/\n/g, '\n    ') + '\n' : ''}${relatedStr ? '    ' + relatedStr.replace(/\n/g, '\n    ') + '\n' : ''}${dataLinksStr ? '    ' + dataLinksStr.replace(/\n/g, '\n    ') + '\n' : ''}
+${versionStr}${datePubStr}${dateModStr}${doiStr}${seriesStr}${licenseStr}${publisherStr}${imprintStr}${keywordsStr ? '    ' + keywordsStr.replace(/\n/g, '\n    ') + '\n' : ''}${contributorsStr ? '    ' + contributorsStr.replace(/\n/g, '\n    ') + '\n' : ''}${relatedStr ? '    ' + relatedStr.replace(/\n/g, '\n    ') + '\n' : ''}${dataLinksStr ? '    ' + dataLinksStr.replace(/\n/g, '\n    ') + '\n' : ''}
   </metadata>`
 
-  // final document
   return `<?xml version="1.0" encoding="UTF-8"?>\n` +
 `<researchDocument version="${esc(M.schemaVersion.split('@')[1] || '0.2')}" xml:lang="${esc(M.language)}">\n` +
 `${metaXml}\n` +

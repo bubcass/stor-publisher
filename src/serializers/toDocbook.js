@@ -1,5 +1,5 @@
 // src/serializers/toDocbook.js
-// ProseMirror JSON + metadata → DocBook 5 <article> (Oireachtas-enriched)
+// ProseMirror JSON + metadata → DocBook 5 <article> (Oireachtas-enriched) with table support
 
 /* ----------------- helpers ----------------- */
 const esc = (s = '') =>
@@ -49,9 +49,11 @@ function inlineText(node) {
         else if (m.type === 'italic' || m.type === 'em') t = `<emphasis>${t}</emphasis>`
         else if (m.type === 'underline') t = `<emphasis role="underline">${t}</emphasis>`
         else if (m.type === 'code') t = `<code>${t}</code>`
+        else if (m.type === 'strike') t = `<emphasis role="strikethrough">${t}</emphasis>`
         else if (m.type === 'link' && m.attrs?.href) {
           const href = esc(m.attrs.href)
           const title = m.attrs.title ? ` xlink:title="${esc(m.attrs.title)}"` : ''
+          // Use DocBook ulink as in your version
           t = `<ulink url="${href}"${title}>${t}</ulink>`
         }
       }
@@ -62,13 +64,66 @@ function inlineText(node) {
   return ''
 }
 
-/* ------------- blocks → DocBook -------------- */
+/* ------------- tables → DocBook ------------- */
+// Guess number of columns from the first row
+function guessCols(tableNode) {
+  const firstRow = (tableNode.content || []).find(r => r.type === 'tableRow')
+  if (!firstRow) return 1
+  return (firstRow.content || []).filter(c => c.type === 'tableHeader' || c.type === 'tableCell').length || 1
+}
+
+// Detect if first row is header (has any tableHeader cells)
+function firstRowIsHeader(tableNode) {
+  const firstRow = (tableNode.content || []).find(r => r.type === 'tableRow')
+  if (!firstRow) return false
+  return (firstRow.content || []).some(c => c.type === 'tableHeader')
+}
+
+function serializeTableToDocBook(tableNode) {
+  const cols = Math.max(1, guessCols(tableNode))
+  const hasHeader = firstRowIsHeader(tableNode)
+
+  const rows = (tableNode.content || []).filter(r => r.type === 'tableRow')
+
+  // Build THEAD if first row has headers
+  let thead = ''
+  let bodyRows = rows
+  if (hasHeader && rows.length) {
+    const headRow = rows[0]
+    const entries = (headRow.content || []).map(cell => {
+      const text = (cell.content || []).map(serializeBlock).join('') || inlineText(cell)
+      return `<entry>${text}</entry>`
+    }).join('')
+    thead = `<thead><row>${entries}</row></thead>`
+    bodyRows = rows.slice(1)
+  }
+
+  const tbody = `<tbody>
+${bodyRows.map(row => {
+    const entries = (row.content || []).map(cell => {
+      const text = (cell.content || []).map(serializeBlock).join('') || inlineText(cell)
+      return `<entry>${text}</entry>`
+    }).join('')
+    return `  <row>${entries}</row>`
+  }).join('\n')}
+</tbody>`
+
+  return `<table>
+  <tgroup cols="${cols}">
+    ${thead}
+    ${tbody}
+  </tgroup>
+</table>`
+}
+
+/* ------------- lists → DocBook -------------- */
 function listToDocBook(node) {
   const tag = node.type === 'orderedList' ? 'orderedlist' : 'itemizedlist'
   const items = (node.content || []).map(li => {
     const parts = (li.content || []).map(ch => {
       if (ch.type === 'paragraph') return `<para>${inlineText(ch)}</para>`
       if (ch.type === 'bulletList' || ch.type === 'orderedList') return listToDocBook(ch)
+      if (ch.type === 'table') return serializeTableToDocBook(ch)
       return ''
     }).join('')
     return `<listitem>${parts}</listitem>`
@@ -76,7 +131,7 @@ function listToDocBook(node) {
   return `<${tag}>${items}</${tag}>`
 }
 
-// Build a nested section tree from headings (h1–h6)
+/* ----- Build a nested section tree from headings (h1–h6) ----- */
 function pmToSections(doc) {
   const blocks = doc?.content || []
   const root = { level: 0, title: null, children: [], paras: [], extras: [] }
@@ -112,6 +167,10 @@ function pmToSections(doc) {
     }
     if (n.type === 'horizontalRule') {
       cur().extras.push(`<literallayout>—</literallayout>`)
+      continue
+    }
+    if (n.type === 'table') {
+      cur().extras.push(serializeTableToDocBook(n))
       continue
     }
     // ignore hardBreak; it’s inline
@@ -257,7 +316,7 @@ export function pmToDocbookArticle(pmJson, meta = {}) {
         return `<section xml:id="${id}"><title>${esc(title)}</title><para></para></section>`
       })()
 
-  // Include oor namespace in the root so oor:unit is valid (harmless if unused)
+  // Include oor namespace (harmless if unused)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <article xmlns="http://docbook.org/ns/docbook"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
